@@ -1,3 +1,4 @@
+import sqlite3  # Importa o módulo para manipular o banco de dados
 import pygame
 import random
 import time
@@ -114,7 +115,7 @@ def show_final_screen():
                     pygame.quit()
                     exit()
 
-# Função principal do jogo
+# Ajuste no loop principal do jogo
 def main():
     global score, elapsed_time, background_y1, background_y2
     # Grupos de sprites
@@ -153,6 +154,34 @@ def main():
         if pygame.sprite.spritecollideany(player, enemies):
             pygame.mixer.music.stop()  # Para a música de fundo
             collision_sound.play()  # Toca o som de colisão
+
+            # Solicita o nome do jogador
+            name = ""
+            waiting_for_name = True
+            while waiting_for_name:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        exit()
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_RETURN and len(name) > 0:
+                            waiting_for_name = False
+                        elif event.key == pygame.K_BACKSPACE:
+                            name = name[:-1]
+                        elif len(name) < 4 and event.unicode.isalnum():
+                            name += event.unicode
+
+                # Exibe a tela para inserir o nome
+                screen.fill(BLACK)
+                name_text = font.render(f"Enter your name (max 4 chars): {name}", True, WHITE)
+                screen.blit(name_text, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2))
+                pygame.display.flip()
+
+            # Salva o jogador no banco de dados
+            save_player_to_db(name, score, elapsed_time)
+
+            # Exibe a tela final com o leaderboard
+            show_final_screen_with_leaderboard()
             running = False
 
         # Calcula o tempo de jogo
@@ -188,7 +217,64 @@ def main():
         clock.tick(FPS)
 
     # Tela de score final
-    show_final_screen()
+    show_final_screen_with_leaderboard()
+
+
+# Função para salvar o jogador no banco de dados
+def save_player_to_db(name, score, elapsed_time):
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO players (name, score, time)
+        VALUES (?, ?, ?)
+    """, (name, score, str(elapsed_time)))
+    conn.commit()
+    conn.close()
+
+# Função para obter os top 3 jogadores
+def get_top_players():
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT name, score, time
+        FROM players
+        ORDER BY score DESC, time ASC
+        LIMIT 3
+    """)
+    top_players = cursor.fetchall()
+    conn.close()
+    return top_players
+
+# Função para exibir a tela final com os top 3 jogadores
+def show_final_screen_with_leaderboard():
+    screen.fill(BLACK)
+
+    # Exibe os top 3 jogadores
+    top_players = get_top_players()
+    leaderboard_text = font.render("Top 3 Players:", True, WHITE)
+    screen.blit(leaderboard_text, (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 100))
+    for i, player in enumerate(top_players):
+        player_text = font.render(f"{i + 1}. {player[0]} - Score: {player[1]} - Time: {player[2]}", True, WHITE)
+        screen.blit(player_text, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 70 + i * 30))
+
+    # Exibe as opções para continuar ou sair
+    continue_text = font.render("Press Y to play again or N to quit", True, WHITE)
+    screen.blit(continue_text, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + 50))
+    pygame.display.flip()
+
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_y:  # Reiniciar o jogo
+                    waiting = False
+                if event.key == pygame.K_n:  # Fechar o jogo
+                    pygame.quit()
+                    exit()
+
 
 # Loop principal para reiniciar o jogo
 while True:
